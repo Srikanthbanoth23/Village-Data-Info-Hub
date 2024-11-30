@@ -1,0 +1,449 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+import mysql.connector
+
+# Database connection function
+def connect_db():
+    return mysql.connector.connect(
+        host="localhost",           
+        user="root",
+        password="Srihari@143",
+        database="village_data"
+    )
+
+# Login Verification
+def verify_login(user_type, village_name, username, password, root):
+    db = connect_db()
+    cursor = db.cursor()
+
+    if user_type == 'DEO':
+        query = "SELECT * FROM deo WHERE username = %s AND password = %s"
+        cursor.execute(query, (username, password))
+        result = cursor.fetchone()
+        db.close()
+        if result:
+            root.open_deo_homepage()
+        else:
+            messagebox.showerror("Error", "Invalid DEO Credentials")
+    elif user_type == 'Village Official':
+        query = "SELECT * FROM village_officials WHERE village_name = %s AND username = %s AND password = %s"
+        cursor.execute(query, (village_name, username, password))
+        result = cursor.fetchone()
+        db.close()
+        if result:
+            root.user_village = village_name
+            root.open_official_homepage()
+        else:
+            messagebox.showerror("Error", "Invalid Village Official Credentials")
+
+
+
+
+
+
+# Main Application Class
+class VillageDataInfoHub(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Village Data Info Hub")
+        self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}")
+        self.user_village = None
+        self.create_login_page()
+
+    def clear_window(self):
+        # Method to clear the window before loading a new page
+        for widget in self.winfo_children():
+            widget.destroy()
+
+    def create_login_page(self):
+        self.clear_window()
+
+        login_frame = tk.Frame(self)
+        login_frame.pack(fill="both", expand=True)
+
+        tk.Label(login_frame, text="Select User Type:").pack(pady=5)
+        user_type = ttk.Combobox(login_frame, values=["DEO", "Village Official"])
+        user_type.pack(pady=5)
+
+        self.village_dropdown = ttk.Combobox(login_frame, values=[])
+        self.village_dropdown.pack(pady=5)
+        self.village_dropdown.set("Select Village")
+        self.village_dropdown.pack_forget()
+
+        user_type.bind("<<ComboboxSelected>>", lambda e: self.on_user_type_select(user_type.get(), login_frame))
+
+        tk.Label(login_frame, text="Username:").pack(pady=5)
+        username_entry = tk.Entry(login_frame)
+        username_entry.pack(pady=5)
+
+        tk.Label(login_frame, text="Password:").pack(pady=5)
+        password_entry = tk.Entry(login_frame, show="*")
+        password_entry.pack(pady=5)
+
+        login_button = tk.Button(
+            login_frame,
+            text="Login",
+            command=lambda: verify_login(
+                user_type.get(), self.village_dropdown.get(), username_entry.get(), password_entry.get(), self
+            )
+        )
+        login_button.pack(pady=20)
+
+    def on_user_type_select(self, user_type, login_frame):
+        if user_type == 'Village Official':
+            self.village_dropdown.pack(pady=5)
+            self.village_dropdown['values'] = self.get_villages()
+        else:
+            self.village_dropdown.pack_forget()
+
+    def open_deo_homepage(self):
+        self.clear_window()
+
+        tk.Label(self, text="DEO Homepage", font=("Arial", 20)).pack(pady=20)
+
+        tk.Button(
+            self,
+            text="Create Village Official Login",
+            command=self.create_village_official_login
+        ).pack(pady=10)
+
+    def create_village_official_login(self):
+        self.clear_window()
+
+        tk.Label(self, text="Create Village Official Login", font=("Arial", 16)).pack(pady=10)
+
+        tk.Label(self, text="Select Village:").pack(pady=5)
+        village_dropdown = ttk.Combobox(self, values=self.get_villages())
+        village_dropdown.pack(pady=5)
+
+        tk.Label(self, text="Username:").pack(pady=5)
+        username_entry = tk.Entry(self)
+        username_entry.pack(pady=5)
+
+        tk.Label(self, text="Password:").pack(pady=5)
+        password_entry = tk.Entry(self, show="*")
+        password_entry.pack(pady=5)
+
+        submit_button = tk.Button(
+            self,
+            text="Submit",
+            command=lambda: self.save_village_official(
+                village_dropdown.get(), username_entry.get(), password_entry.get()
+            )
+        )
+        submit_button.pack(pady=20)
+
+        tk.Button(self, text="Back", command=self.open_deo_homepage).pack(pady=10)
+
+    def save_village_official(self, village_name, username, password):
+        if not village_name or not username or not password:
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        db = connect_db()
+        cursor = db.cursor()
+        try:
+            query = "INSERT INTO village_officials (village_name, username, password) VALUES (%s, %s, %s)"
+            cursor.execute(query, (village_name, username, password))
+            db.commit()
+            messagebox.showinfo("Success", "Village Official Login Created Successfully")
+            self.open_deo_homepage()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Error", f"Failed to create login: {err}")
+        finally:
+            db.close()
+
+    def open_official_homepage(self):
+        self.clear_window()
+
+        tk.Label(self, text="Village Official Homepage", font=("Arial", 20)).pack(pady=20)
+
+        action_dropdown = ttk.Combobox(self, values=["Add Family", "Add Family Member", "View Families"])
+        action_dropdown.pack(pady=5)
+        action_dropdown.bind("<<ComboboxSelected>>", lambda e: self.perform_action(action_dropdown.get()))
+        back_button = tk.Button(self, text="Back to Login", command=self.return_to_login)
+        back_button.pack(pady=10)
+
+    def perform_action(self, action):
+        if action == "Add Family":
+            self.add_family()
+        elif action == "Add Family Member":
+            self.add_family_member()
+        elif action == "View Families":
+            self.view_families()
+
+    def add_family(self):
+        self.clear_window()
+        tk.Label(self, text="Add Family", font=("Arial", 16)).pack(pady=10)
+
+        tk.Label(self, text="Head of Family Name:").pack(pady=5)
+        head_name_entry = tk.Entry(self)
+        head_name_entry.pack(pady=5)
+
+        tk.Label(self, text="Ration Card Number:").pack(pady=5)
+        ration_card_entry = tk.Entry(self)
+        ration_card_entry.pack(pady=5)
+
+        submit_button = tk.Button(
+            self,
+            text="Submit",
+            command=lambda: self.save_family(head_name_entry.get(), ration_card_entry.get())
+        )
+        submit_button.pack(pady=20)
+
+    def save_family(self, head_name, ration_card):
+        if not head_name or not ration_card:
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        village_id = self.get_village_id()
+
+        if not village_id:
+            messagebox.showerror("Error", "Village ID not found for the logged-in village!")
+            return
+
+        db = connect_db()
+        cursor = db.cursor()
+
+        try:
+            query = "INSERT INTO families (head_name, ration_card_no, village_id) VALUES (%s, %s, %s)"
+            cursor.execute(query, (head_name, ration_card, village_id))
+            db.commit()
+            messagebox.showinfo("Success", "Family Added Successfully")
+            self.open_official_homepage()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Error", f"Failed to add family: {err}")
+        finally:
+            db.close()
+
+    def get_village_id(self):
+        db = connect_db()
+        cursor = db.cursor()
+        query = "SELECT village_id FROM villages WHERE village_name = %s"
+        cursor.execute(query, (self.user_village,))
+        result = cursor.fetchone()
+        db.close()
+        return result[0] if result else None
+
+
+
+
+    
+    def add_family_member(self):
+        self.clear_window()
+        tk.Label(self, text="Add Family Member", font=("Arial", 16)).pack(pady=10)
+
+        # Dropdown for selecting the family
+        tk.Label(self, text="Select Family:").pack(pady=5)
+        family_dropdown = ttk.Combobox(self, values=self.get_families())
+        family_dropdown.pack(pady=5)
+
+        # Entry fields for family member details
+        tk.Label(self, text="Member Name:").pack(pady=5)
+        member_name_entry = tk.Entry(self)
+        member_name_entry.pack(pady=5)
+
+        tk.Label(self, text="Date of Birth (YYYY-MM-DD):").pack(pady=5)
+        dob_entry = tk.Entry(self)
+        dob_entry.pack(pady=5)
+
+        tk.Label(self, text="Aadhar Card Number:").pack(pady=5)
+        aadhar_entry = tk.Entry(self)
+        aadhar_entry.pack(pady=5)
+
+        tk.Label(self, text="Phone Number:").pack(pady=5)
+        phone_entry = tk.Entry(self)
+        phone_entry.pack(pady=5)
+
+        tk.Label(self, text="Qualification:").pack(pady=5)
+        qualification_entry = tk.Entry(self)
+        qualification_entry.pack(pady=5)
+
+        tk.Label(self, text="Blood Group:").pack(pady=5)
+        blood_group_entry = tk.Entry(self)
+        blood_group_entry.pack(pady=5)
+
+        tk.Label(self, text="Occupation:").pack(pady=5)
+        occupation_entry = tk.Entry(self)
+        occupation_entry.pack(pady=5)
+
+        # Submit button to save family member details
+        submit_button = tk.Button(
+            self,
+            text="Submit",
+            command=lambda: self.save_family_member(
+                family_dropdown.get(),
+                member_name_entry.get(),
+                dob_entry.get(),
+                aadhar_entry.get(),
+                phone_entry.get(),
+                qualification_entry.get(),
+                blood_group_entry.get(),
+                occupation_entry.get()
+            )
+        )
+        submit_button.pack(pady=20)
+
+        # Back button
+        tk.Button(self, text="Back", command=self.open_official_homepage).pack(pady=10)
+
+    def save_family_member(self, family_name, member_name, dob, aadhar, phone, qualification, blood_group, occupation):
+        if not all([family_name, member_name, dob, aadhar, phone, qualification, blood_group, occupation]):
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        # Get the family_id from the family_name
+        family_id = self.get_family_id(family_name)
+        if not family_id:
+            messagebox.showerror("Error", "Family not found!")
+            return
+
+        # Connect to the database and insert family member data
+        db = connect_db()
+        cursor = db.cursor()
+
+        try:
+            query = """
+            INSERT INTO family_members 
+            (family_id, member_name, dob, aadhar_no, phone_no, qualification, blood_group, occupation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(query, (family_id, member_name, dob, aadhar, phone, qualification, blood_group, occupation))
+            db.commit()
+            messagebox.showinfo("Success", "Family Member Added Successfully")
+            self.open_official_homepage()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Error", f"Failed to add family member: {err}")
+        finally:
+            db.close()
+
+    def get_family_id(self, family_name):
+        # Query the database to get the family_id based on the family name
+        db = connect_db()
+        cursor = db.cursor()
+        query = "SELECT family_id FROM families WHERE head_name = %s AND village_id = %s"
+        cursor.execute(query, (family_name, self.get_village_id()))
+        result = cursor.fetchone()
+        db.close()
+        return result[0] if result else None
+
+    
+
+
+        submit_button.pack(pady=20)
+        tk.Button(self, text="Back", command=self.open_official_homepage).pack(pady=10)
+
+    def get_families(self):
+        db = connect_db()
+        cursor = db.cursor()
+        query = "SELECT head_name FROM families WHERE village_id = %s"
+        cursor.execute(query, (self.get_village_id(),))
+        families = cursor.fetchall()
+        db.close()
+        return [family[0] for family in families]
+
+    def view_families(self):
+        self.clear_window()
+
+        tk.Label(self, text="View Families", font=("Arial", 16)).pack(pady=10)
+
+    # Treeview to display families
+        family_tree = ttk.Treeview(self, columns=("Family ID", "Head Name"), show="headings", height=10)
+        family_tree.heading("Family ID", text="Family ID", anchor="w")  # Align header text to the left
+        family_tree.heading("Head Name", text="Head Name", anchor="w")
+        family_tree.column("Family ID", anchor="w")  # Align column data to the left
+        family_tree.column("Head Name", anchor="w")
+        family_tree.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)  # Added padding for margins
+
+
+    # Fetch families and insert them into the Treeview
+        db = connect_db()
+        cursor = db.cursor()
+        query = """
+        SELECT family_id, head_name 
+        FROM families 
+        WHERE village_id = %s
+        """
+        cursor.execute(query, (self.get_village_id(),))
+        families = cursor.fetchall()
+        db.close()
+
+        for family in families:
+            family_tree.insert("", "end", values=family)
+
+    # Bind selection event to display family members
+        family_tree.bind("<Double-1>", lambda e: self.view_family_members(family_tree.item(family_tree.focus())["values"]))
+
+        tk.Button(self, text="Back", command=self.open_official_homepage).pack(pady=10)
+
+
+
+
+
+
+    def view_family_members(self, selected_family):
+        if not selected_family:
+            messagebox.showerror("Error", "Please select a family!")
+            return
+
+        family_id, family_name = selected_family
+        self.clear_window()
+
+        tk.Label(self, text=f"Family Members of {family_name}", font=("Arial", 16)).pack(pady=10)
+
+    # Treeview to display family member details
+        member_tree = ttk.Treeview(
+            self, 
+            columns=("Member Name", "DOB", "Aadhar", "Phone", "Qualification", "Blood Group", "Occupation"), 
+            show="headings",
+            height=10
+        )
+        member_tree.heading("Member Name", text="Member Name", anchor="w")
+        member_tree.heading("DOB", text="Date of Birth", anchor="w")
+        member_tree.heading("Aadhar", text="Aadhar", anchor="w")
+        member_tree.heading("Phone", text="Phone", anchor="w")
+        member_tree.heading("Qualification", text="Qualification", anchor="w")
+        member_tree.heading("Blood Group", text="Blood Group", anchor="w")
+        member_tree.heading("Occupation", text="Occupation", anchor="w")
+        member_tree.column("Member Name", anchor="w")
+        member_tree.column("DOB", anchor="w")
+        member_tree.column("Aadhar", anchor="w")
+        member_tree.column("Phone", anchor="w")
+        member_tree.column("Qualification", anchor="w")
+        member_tree.column("Blood Group", anchor="w")
+        member_tree.column("Occupation", anchor="w")
+        member_tree.pack(pady=10, fill=tk.BOTH, expand=True)
+
+    # Fetch family member details and insert into Treeview
+        db = connect_db()
+        cursor = db.cursor()
+        query = """
+        SELECT member_name, dob, aadhar_no, phone_no, qualification, blood_group, occupation 
+        FROM family_members 
+        WHERE family_id = %s
+        """
+        cursor.execute(query, (family_id,))
+        members = cursor.fetchall()
+        db.close()
+
+        for member in members:
+            member_tree.insert("", "end", values=member)
+    
+        tk.Button(self, text="Back", command=self.view_families).pack(pady=10)
+
+
+    
+
+    def get_villages(self):
+        db = connect_db()
+        cursor = db.cursor()
+        query = "SELECT village_name FROM villages"
+        cursor.execute(query)
+        villages = cursor.fetchall()
+        db.close()
+        return [village[0] for village in villages]
+
+# Run the application
+if __name__ == "__main__":
+    app = VillageDataInfoHub()
+    app.mainloop()
